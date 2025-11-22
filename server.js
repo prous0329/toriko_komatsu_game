@@ -12,13 +12,13 @@ const io = socketIo(server);
 
 // --- サーバー側のゲーム状態を定義 ---
 let gameState = {
-    currentWinner: null,
-    currentCount: 0,
+    currentWinner: null, // 現在コンボを主導している四天王
+    currentCount: 0,     // 現在のコンボ数
     scores: { toriko: 0, sunny: 0, coco: 0, zebra: 0 },
     winConditions: { toriko: 5, sunny: 3, coco: 3, zebra: 3 },
     names: { komatsu: '小松', toriko: 'トリコ', sunny: 'サニー', coco: 'ココ', zebra: 'ゼブラ' },
     isGameOver: false,
-    comboReady: false // ★追加：小松が押したらtrueになる（コンボ準備完了）
+    lastSpeaker: null // ★追加：直前に押した人を追跡するために使用
 };
 // ------------------------------------
 
@@ -41,10 +41,15 @@ io.on('connection', (socket) => {
 
         // --- サーバー上でゲームロジックを実行 ---
         if (speaker === 'komatsu') { 
-             resetGame(); // 小松はコンボをリセットする役割（コンボスタートの準備）
+             // 小松が押したら、コンボ状態を完全にリセットする
+             resetGame(); 
         } else { 
-            checkWin(speaker); // 四天王の操作
+            // 四天王の操作
+            checkWin(speaker); 
         }
+        
+        // 誰が押したかを最後に記録する (checkWinの後の判定に使うため)
+        gameState.lastSpeaker = speaker;
         // ----------------------------------------
         
         io.emit('new_action', data); 
@@ -54,7 +59,6 @@ io.on('connection', (socket) => {
         if (gameState.isGameOver) {
              console.log(`ゲーム終了！勝利者: ${gameState.currentWinner}`);
              setTimeout(() => {
-                 // スコアは維持したまま、コンボ状態のみリセット
                  resetComboStateOnly(); 
                  io.emit('update_game_state', gameState); 
              }, 3000); 
@@ -68,11 +72,13 @@ io.on('connection', (socket) => {
 
 // --- サーバー側のゲームロジック ---
 
-// 小松が押したときの関数（コンボ継続準備）
+// 小松が押したときの関数（コンボをリセットする役割）
 function resetGame() {
+    // 状態を完全に初期値に戻す（小松が押すことでコンボが中断される）
+    gameState.currentWinner = null; 
+    gameState.currentCount = 0;     
     gameState.isGameOver = false;
-    gameState.comboReady = true; // ★小松が押したので、コンボ継続準備OK！
-    console.log("ゲーム状態をリセットしました（小松がコンボの準備をしました）。");
+    console.log("小松が押しました。コンボ状態をリセットし、新しいコンボの準備ができました。");
 }
 
 // ゲームオーバー後の初期化（スコアは維持）
@@ -80,30 +86,33 @@ function resetComboStateOnly() {
     gameState.currentWinner = null;
     gameState.currentCount = 0;
     gameState.isGameOver = false;
-    gameState.comboReady = false; 
+    gameState.lastSpeaker = null; 
     console.log("ゲームオーバー後の状態をリセットしました。");
 }
 
 function checkWin(currentSpeaker) {
     const winGoal = gameState.winConditions[currentSpeaker];
+    const previousWinner = gameState.currentWinner; 
+    const previousSpeaker = gameState.lastSpeaker; // 最後のボタンを押した人
 
-    // 1. 異なる四天王が押した場合 or リセット後の最初の押し
-    if (gameState.currentWinner !== currentSpeaker) {
+    // 1. コンボをリセットすべき条件をチェック
+    if (previousSpeaker === 'komatsu' || previousWinner === null) {
+        // (A) 直前が小松、または最初の押しの場合
+        //    -> 新しいコンボをトリコ/ココ/サニー/ゼブラで開始する
         gameState.currentWinner = currentSpeaker;
         gameState.currentCount = 1;
-        gameState.comboReady = false; // 新しいコンボが始まったのでreadyはfalse
-        
+
+    } else if (previousWinner === currentSpeaker) {
+        // (B) 同じ四天王が連続で押した場合（コンボ継続）
+        //    -> 小松の介入は不要で、コンボを伸ばす
+        gameState.currentCount++;
+
     } else {
-        // 2. 同じ四天王が連続で押した（コンボ継続の判定）
-        
-        // ★変更点：小松が直前に押した（comboReadyがtrue）の場合のみコンボを継続させる★
-        if (gameState.comboReady) {
-            gameState.currentCount++; // 小松のおかげでコンボ継続
-            gameState.comboReady = false; // コンボ継続後はreadyをfalseに戻す
-        } else {
-            // 小松が介在せず、四天王が連続で押した場合は、コンボは維持されない（1のまま）。
-            // currentCountは1のまま維持されます
-        }
+        // (C) 別の四天王が押した場合（コンボ中断）
+        //    -> コンボをリセットし、新しい四天王でコンボを1から開始
+        gameState.currentWinner = currentSpeaker;
+        gameState.currentCount = 1;
+        console.log(`コンボが中断されました。${gameState.names[currentSpeaker]}のコンボを1から再開します。`);
     }
 
     // 勝利判定
