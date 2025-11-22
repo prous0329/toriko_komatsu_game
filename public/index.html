@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>トリコ＆小松 コンビ結成ゲーム (オンライン版)</title>
+    <style>
+        /* --- CSS: スタイル (変更なし) --- */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #game-container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        h1 {
+            text-align: center;
+            color: #d32f2f;
+            margin-bottom: 20px;
+        }
+        #current-status {
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        #continuous-status {
+            color: #1a73e8;
+        }
+        #log-area {
+            height: 250px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            background-color: #fafafa;
+            border-radius: 5px;
+        }
+        
+        .komatsu-msg, .shitennou-msg {
+            margin: 5px 0;
+            padding: 8px 12px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            max-width: 80%;
+            clear: both;
+        }
+
+        .komatsu-msg {
+            background-color: #e0f7fa;
+            float: left;
+        }
+
+        .shitennou-msg {
+            background-color: #ffe0b2;
+            float: right;
+            flex-direction: row-reverse;
+        }
+
+        .character-icon {
+            width: 40px; 
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            vertical-align: middle;
+            margin: 0 8px; 
+            border: 2px solid #666;
+        }
+        
+        .speech-text {
+            font-size: 1em;
+        }
+
+
+        #action-area {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .action-button {
+            padding: 10px 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+        .komatsu-btn {
+            background-color: #2196f3;
+            color: white;
+        }
+        .komatsu-btn:hover:not(:disabled) { background-color: #1976d2; }
+
+        .shitennou-btn {
+            background-color: #ff9800;
+            color: white;
+        }
+        .shitennou-btn:hover:not(:disabled) { background-color: #f57c00; }
+        
+        .disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #score-board {
+            border-top: 2px dashed #ccc;
+            padding-top: 15px;
+            text-align: center;
+        }
+        #score-board h2 {
+            color: #6a1b9a;
+            margin-top: 0;
+        }
+        .score-item {
+            display: inline-block;
+            margin: 0 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        #result-message {
+            text-align: center;
+            padding: 15px;
+            margin: 15px 0;
+            background-color: #c8e6c9;
+            border: 3px solid #388e3c;
+            border-radius: 8px;
+            font-size: 1.2em;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>🔥 トリコ＆小松 コンビ結成ゲーム 🔥</h1>
+
+    <div id="current-status">
+        <span id="continuous-status">ゲームスタート！ (四天王の連続レスを狙おう)</span>
+    </div>
+    
+    <div id="log-area">
+        </div>
+
+    <div id="action-area">
+        <button id="komatsu-btn" class="action-button komatsu-btn" data-speaker="komatsu" onclick="handleInput('komatsu')">小松：「トリコさん！」</button>
+        <br>
+        <button class="action-button shitennou-btn" data-speaker="toriko" data-call="小松ゥ！" data-win="5" onclick="handleInput('toriko')">トリコ：「小松ゥ！」</button>
+        <button class="action-button shitennou-btn" data-speaker="sunny" data-call="マツ！" data-win="3" onclick="handleInput('sunny')">サニー：「マツ！」</button>
+        <button class="action-button shitennou-btn" data-speaker="coco" data-call="小松くん！" data-win="3" onclick="handleInput('coco')">ココ：「小松くん！」</button>
+        <button class="action-button shitennou-btn" data-speaker="zebra" data-call="小僧ォ！" data-win="3" onclick="handleInput('zebra')">ゼブラ：「小僧ォ！」</button>
+    </div>
+
+    <div id="result-message" style="display: none;">
+        </div>
+
+    <div id="score-board">
+        <h2>🏆 勝利回数</h2>
+        <div class="score-item">トリコ：<span id="score-toriko">0</span>回</div>
+        <div class="score-item">サニー：<span id="score-sunny">0</span>回</div>
+        <div class="score-item">ココ：<span id="score-coco">0</span>回</div>
+        <div class="score-item">ゼブラ：<span id="score-zebra">0</span>回</div>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+// --- JavaScript: ゲームロジック (オンライン対応 完全版) ---
+
+// サーバーから状態を受け取るため、初期値のみ定義
+let gameState = {
+    currentWinner: null,
+    currentCount: 0,
+    isGameOver: false,
+    scores: { toriko: 0, sunny: 0, coco: 0, zebra: 0 },
+    winConditions: { toriko: 5, sunny: 3, coco: 3, zebra: 3 },
+    names: { komatsu: '小松', toriko: 'トリコ', sunny: 'サニー', coco: 'ココ', zebra: 'ゼブラ' },
+    // ★画像とボイスのパスは、前回の設定を維持しています。publicフォルダ内に正しく配置してください。★
+    imagePaths: {
+        komatsu: 'komatsu.jpg',
+        toriko: 'toriko.jpg',
+        sunny: 'sunny.jpeg', 
+        coco: 'coco.jpeg',   
+        zebra: 'zebra.jpeg'  
+    },
+    voicePaths: {
+        komatsu: 'komatsu_torikosan.mp3',
+        toriko: 'toriko_komatsuu.mp3',
+        sunny: 'sunny_matsu.mp3',
+        coco: 'coco_komatsukun.mp3',
+        zebra: 'zebra_kozoo.mp3'
+    },
+};
+
+// DOM要素の取得
+const logArea = document.getElementById('log-area');
+const continuousStatusDisplay = document.getElementById('continuous-status');
+const resultMessage = document.getElementById('result-message');
+const actionButtons = document.querySelectorAll('.action-button');
+
+// ----------------------------------------------------
+// ★ サーバーとの接続とイベント処理 (最重要部分) ★
+// ----------------------------------------------------
+const socket = io();
+
+// サーバーから初期状態や更新情報を受け取る
+socket.on('update_game_state', (newState) => {
+    // サーバーから受け取った最新の状態に上書き
+    gameState = { ...gameState, ...newState };
+    // 画面の更新を実行
+    updateDisplay();
+});
+
+// サーバーから新しいアクション（ボタン操作）を受け取る
+socket.on('new_action', (data) => {
+    // サーバーからの情報を使ってログとボイスを全員の画面で実行する
+    if (data.speaker === 'komatsu') {
+        addLog(gameState.names.komatsu, 'トリコさん！', 'komatsu-msg', 'komatsu');
+    } else {
+        const button = document.querySelector(`.shitennou-btn[data-speaker="${data.speaker}"]`);
+        // ボタンから最新の呼び名を取得（サーバー側で設定しても良いが、クライアント側で設定を維持）
+        const call = button ? button.getAttribute('data-call') : "!!!";
+        addLog(gameState.names[data.speaker], `『${call}』`, 'shitennou-msg', data.speaker);
+    }
+    
+    // ボイスの再生
+    playVoice(gameState.voicePaths[data.speaker]);
+});
+
+// ----------------------------------------------------
+// ★ クライアントがボタンを押したときの処理（サーバーに送信） ★
+// ----------------------------------------------------
+function handleInput(speaker) {
+    if (gameState.isGameOver) return;
+
+    // 勝利判定はサーバー側で行うため、クライアントはサーバーにイベントを送るだけ
+    socket.emit('player_action', { speaker: speaker });
+
+    // 画面更新はサーバーからの 'update_game_state' を待つ
+}
+
+
+// ----------------------------------------------------
+// ★ 汎用関数 (サーバーからの指示で実行される) ★
+// ----------------------------------------------------
+
+/**
+ * 音声再生機能
+ */
+function playVoice(voiceFile) {
+    if (!voiceFile) return;
+
+    const audio = new Audio(voiceFile);
+    audio.play().catch(error => {
+        console.warn("ボイス再生に失敗しました:", error.message);
+    });
+}
+
+/**
+ * ログエリアにメッセージと画像を追加する
+ */
+function addLog(name, text, className, speakerId) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = className;
+
+    const img = document.createElement('img');
+    img.src = gameState.imagePaths[speakerId];
+    img.alt = name;
+    img.className = 'character-icon';
+    
+    const textSpan = document.createElement('span');
+    textSpan.className = 'speech-text';
+    textSpan.innerHTML = `**${name}**: ${text}`;
+
+    if (className === 'komatsu-msg') { 
+        msgDiv.appendChild(img);
+        msgDiv.appendChild(textSpan);
+    } else {
+        msgDiv.appendChild(textSpan);
+        msgDiv.appendChild(img);
+    }
+    
+    logArea.appendChild(msgDiv);
+    logArea.scrollTop = logArea.scrollHeight;
+}
+
+
+/**
+ * 画面の表示とボタンの有効/無効を更新する
+ * (gameStateはサーバーから受け取った最新の状態を使用)
+ */
+function updateDisplay() {
+    // 連続状況の更新
+    if (gameState.currentCount > 0 && gameState.currentWinner) {
+        const winnerName = gameState.names[gameState.currentWinner];
+        const goal = gameState.winConditions[gameState.currentWinner];
+        continuousStatusDisplay.innerHTML = `**${winnerName}**が**${gameState.currentCount}連続**中！(勝利まであと**${goal - gameState.currentCount}レス**)`;
+    } else {
+        continuousStatusDisplay.textContent = 'ゲームスタート！ (四天王の連続レスを狙おう)';
+    }
+
+    // スコアボードの更新
+    document.getElementById(`score-toriko`).textContent = gameState.scores.toriko;
+    document.getElementById(`score-sunny`).textContent = gameState.scores.sunny;
+    document.getElementById(`score-coco`).textContent = gameState.scores.coco;
+    document.getElementById(`score-zebra`).textContent = gameState.scores.zebra;
+
+    // ボタンの有効/無効の切り替え
+    actionButtons.forEach(btn => {
+        // isGameOverの状態もサーバーから受け取っている
+        btn.disabled = gameState.isGameOver;
+        btn.classList.toggle('disabled', gameState.isGameOver);
+    });
+
+    // 勝利メッセージの表示/非表示
+    if (gameState.isGameOver) {
+        const winnerName = gameState.names[gameState.currentWinner];
+        const goal = gameState.winConditions[gameState.currentWinner];
+        const msg = `**🏆 勝利！** ${winnerName}が${goal}レス連続達成！<br>小松との**熱いコンビ**を結成しました！🎉`;
+        resultMessage.innerHTML = msg;
+        resultMessage.style.display = 'block';
+    } else {
+        resultMessage.style.display = 'none';
+    }
+
+    // 手動リセットボタンは不要なので削除
+    if (document.getElementById('reset-btn')) {
+        document.getElementById('reset-btn').remove();
+    }
+}
+
+/**
+ * ゲームをリセットする
+ * (サーバーからのリセット指示でのみ呼ばれ、クライアント側は表示クリアのみ)
+ */
+function resetGame() {
+    logArea.innerHTML = '';
+    resultMessage.style.display = 'none';
+
+    // gameState はサーバーからの 'update_game_state' で最終的に更新される
+    updateDisplay();
+}
+
+// ページ読み込み時に初期表示を実行 (スコアはすべて0で始まる)
+updateDisplay(); 
+</script>
+</body>
+</html>
