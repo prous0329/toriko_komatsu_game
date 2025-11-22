@@ -15,18 +15,16 @@ let gameState = {
     currentWinner: null,
     currentCount: 0,
     scores: { toriko: 0, sunny: 0, coco: 0, zebra: 0 },
-    // 勝利条件など、他の設定もここに保持
     winConditions: { toriko: 5, sunny: 3, coco: 3, zebra: 3 },
     names: { komatsu: '小松', toriko: 'トリコ', sunny: 'サニー', coco: 'ココ', zebra: 'ゼブラ' },
-    isGameOver: false // isGameOverが定義されていなかったので追加
+    isGameOver: false,
+    comboReady: false // ★追加：小松が押したらtrueになる（コンボ準備完了）
 };
 // ------------------------------------
 
 // クライアント（ブラウザ）からアクセスがあったときにindex.htmlを返す設定
-// Renderでファイルを公開するために 'public' フォルダを指定
 app.use(express.static('public')); 
 app.get('/', (req, res) => {
-    // __dirname は server.js があるフォルダを示します
     res.sendFile(__dirname + '/public/index.html');
 });
 
@@ -34,54 +32,78 @@ app.get('/', (req, res) => {
 io.on('connection', (socket) => {
     console.log('新しいプレイヤーが接続しました:', socket.id);
 
-    // 接続したプレイヤーに現在のゲーム状態を送信
     socket.emit('update_game_state', gameState);
 
     // ★クライアントからのボタン操作イベントを受け取る★
     socket.on('player_action', (data) => {
-        console.log(`[${data.speaker}] ボタンが押されました`);
+        const speaker = data.speaker;
+        console.log(`[${speaker}] ボタンが押されました`);
 
         // --- サーバー上でゲームロジックを実行 ---
-        // 小松の操作（リセット役）
-        if (data.speaker === 'komatsu') {
-             resetGame(); // 小松が押したら無条件でリセット（コンビ結成失敗）
-        } else {
-            // 四天王の操作（連続役）
-            checkWin(data.speaker);
+        if (speaker === 'komatsu') { 
+             resetGame(); // 小松はコンボをリセットする役割（コンボスタートの準備）
+        } else { 
+            checkWin(speaker); // 四天王の操作
         }
         // ----------------------------------------
         
-        // 操作情報と最新の状態を全クライアントに配信
-        io.emit('new_action', data); // ボタンが押されたことを全員に通知
-        io.emit('update_game_state', gameState); // 最新のゲーム状態を全員に通知
+        io.emit('new_action', data); 
+        io.emit('update_game_state', gameState); 
 
         // ゲーム終了後の自動リセット
         if (gameState.isGameOver) {
              console.log(`ゲーム終了！勝利者: ${gameState.currentWinner}`);
              setTimeout(() => {
-                 resetGame();
-                 io.emit('update_game_state', gameState); // リセット後の状態を配信
-             }, 3000); // 3秒後に自動リセット
+                 // スコアは維持したまま、コンボ状態のみリセット
+                 resetComboStateOnly(); 
+                 io.emit('update_game_state', gameState); 
+             }, 3000); 
         }
     });
 
-    // クライアントが切断したときの処理
     socket.on('disconnect', () => {
         console.log('プレイヤーが切断しました:', socket.id);
     });
 });
 
 // --- サーバー側のゲームロジック ---
+
+// 小松が押したときの関数（コンボ継続準備）
+function resetGame() {
+    gameState.isGameOver = false;
+    gameState.comboReady = true; // ★小松が押したので、コンボ継続準備OK！
+    console.log("ゲーム状態をリセットしました（小松がコンボの準備をしました）。");
+}
+
+// ゲームオーバー後の初期化（スコアは維持）
+function resetComboStateOnly() {
+    gameState.currentWinner = null;
+    gameState.currentCount = 0;
+    gameState.isGameOver = false;
+    gameState.comboReady = false; 
+    console.log("ゲームオーバー後の状態をリセットしました。");
+}
+
 function checkWin(currentSpeaker) {
     const winGoal = gameState.winConditions[currentSpeaker];
 
-    // 連続が続いているかチェック
-    if (gameState.currentWinner === currentSpeaker && gameState.currentCount > 0) {
-        gameState.currentCount++;
-    } else {
-        // 新しい四天王が押した、または小松が押した後
+    // 1. 異なる四天王が押した場合 or リセット後の最初の押し
+    if (gameState.currentWinner !== currentSpeaker) {
         gameState.currentWinner = currentSpeaker;
         gameState.currentCount = 1;
+        gameState.comboReady = false; // 新しいコンボが始まったのでreadyはfalse
+        
+    } else {
+        // 2. 同じ四天王が連続で押した（コンボ継続の判定）
+        
+        // ★変更点：小松が直前に押した（comboReadyがtrue）の場合のみコンボを継続させる★
+        if (gameState.comboReady) {
+            gameState.currentCount++; // 小松のおかげでコンボ継続
+            gameState.comboReady = false; // コンボ継続後はreadyをfalseに戻す
+        } else {
+            // 小松が介在せず、四天王が連続で押した場合は、コンボは維持されない（1のまま）。
+            // currentCountは1のまま維持されます
+        }
     }
 
     // 勝利判定
@@ -90,24 +112,11 @@ function checkWin(currentSpeaker) {
         gameState.scores[currentSpeaker]++;
     }
 }
-
-function resetGame() {
-    // 状態を初期値に戻す
-    gameState.currentWinner = null;
-    gameState.currentCount = 0;
-    gameState.isGameOver = false;
-    // スコアはそのまま保持
-    console.log("ゲーム状態をリセットしました。");
-}
 // ------------------------------------
 
-// サーバーを起動
-// ★Render対応の最重要箇所★
-// Renderの環境変数(process.env.PORT)があればそれを使用し、
-// なければローカルテスト用に3000を使用します
+// サーバーを起動 (Render対応)
 const PORT = process.env.PORT || 3000; 
 
-// Socket.IOに使うHTTPサーバー(server)で起動します。
 server.listen(PORT, () => {
     console.log(`サーバーがポート ${PORT} で起動しました。`);
     console.log(`http://localhost:${PORT} にアクセスしてください。`);
