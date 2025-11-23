@@ -18,7 +18,8 @@ let gameState = {
     winConditions: { toriko: 5, sunny: 3, coco: 3, zebra: 3 },
     names: { komatsu: '小松', toriko: 'トリコ', sunny: 'サニー', coco: 'ココ', zebra: 'ゼブラ' },
     isGameOver: false,
-    lastSpeaker: null // ★直前に押した人を追跡
+    lastSpeaker: null, // 直前に押した人を追跡
+    comboStarted: false // ★追加: コンボがすでに開始されているかを示すフラグ
 };
 // ------------------------------------
 
@@ -72,12 +73,13 @@ io.on('connection', (socket) => {
 
 // --- サーバー側のゲームロジック ---
 
-// 小松が押したときの関数（コンボをリセットする役割）
+// 小松が押したときの関数（コンボをリセットし、開始権を失わせる）
 function resetGame() {
     // 状態を完全に初期値に戻す（小松が押すことでコンボが中断される）
     gameState.currentWinner = null; 
     gameState.currentCount = 0;     
     gameState.isGameOver = false;
+    gameState.comboStarted = false; // ★重要: コンボ開始権を失わせる
     console.log("小松が押しました。コンボ状態をリセットし、新しいコンボの準備ができました。");
 }
 
@@ -87,6 +89,7 @@ function resetComboStateOnly() {
     gameState.currentCount = 0;
     gameState.isGameOver = false;
     gameState.lastSpeaker = null; 
+    gameState.comboStarted = false;
     console.log("ゲームオーバー後の状態をリセットしました。");
 }
 
@@ -95,27 +98,39 @@ function checkWin(currentSpeaker) {
     const previousWinner = gameState.currentWinner; 
     const previousSpeaker = gameState.lastSpeaker; // 最後のボタンを押した人
 
-    // 1. 小松が押されていない場合の特殊処理
-    if (previousSpeaker !== 'komatsu' && previousWinner === null) {
-        // コンボが始まっていない初期状態で、小松以外が押した場合は無効化
-        // currentWinnerを設定せず、currentCountも0のまま維持することで勝利を阻止
-        gameState.currentWinner = currentSpeaker; // 押した人として記録はする
-        gameState.currentCount = 0; // カウントは0のまま、勝利阻止
-        console.log("コンボ開始失敗！小松が押す必要があります。");
-        return; // これ以上処理せずに終了
+    // 1. コンボがまだ開始されていない場合の処理 (初期状態 or 小松が押した後)
+    if (!gameState.comboStarted) {
+        
+        if (previousSpeaker === 'komatsu' || previousWinner === null) {
+            // (A) 正しいコンボ開始: 直前が小松、または初期状態の最初の押し
+            gameState.currentWinner = currentSpeaker;
+            gameState.currentCount = 1;
+            gameState.comboStarted = true; // ★コンボ開始権を獲得
+            
+        } else {
+            // (B) 誤ったコンボ開始: 小松の後に押されていない (例: ココ -> ココ)
+            //     コンボは開始させず、カウントも0のまま維持する
+            gameState.currentWinner = currentSpeaker; // 押した人として記録はする
+            gameState.currentCount = 0; // ★カウントを0のまま維持し、勝利を阻止
+            console.log("コンボ開始失敗！小松が押す必要があります。");
+            return; // これ以上処理せずに終了
+        }
     }
-
-    // 2. コンボの開始・継続・中断のロジック
     
-    if (previousWinner !== currentSpeaker) {
-        // (A) 別の四天王が押した、または直前が小松で新しい四天王が押した
-        gameState.currentWinner = currentSpeaker;
-        gameState.currentCount = 1;
+    // 2. コンボが開始された後の処理 (連続押し or 中断)
+    else { // gameState.comboStarted === true の場合
+        
+        if (previousWinner === currentSpeaker) {
+            // (C) 同じ四天王が連続で押した場合（コンボ継続）
+            gameState.currentCount++;
 
-    } else {
-        // (B) 同じ四天王が連続で押した場合（コンボ継続）
-        //    -> 小松の介入は不要で、コンボを伸ばす
-        gameState.currentCount++;
+        } else {
+            // (D) 別の四天王が押した場合（コンボ中断）
+            //     コンボをリセットし、新しい四天王でコンボを1から開始
+            gameState.currentWinner = currentSpeaker;
+            gameState.currentCount = 1;
+            console.log(`コンボが中断されました。${gameState.names[currentSpeaker]}のコンボを1から再開します。`);
+        }
     }
 
     // 勝利判定
