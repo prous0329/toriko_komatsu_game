@@ -18,7 +18,7 @@ let gameState = {
     winConditions: { toriko: 5, sunny: 3, coco: 3, zebra: 3 },
     names: { komatsu: '小松', toriko: 'トリコ', sunny: 'サニー', coco: 'ココ', zebra: 'ゼブラ' },
     isGameOver: false,
-    lastSpeaker: null // ★追加：直前に押した人を追跡するために使用
+    lastSpeaker: null // ★直前に押した人を追跡
 };
 // ------------------------------------
 
@@ -48,7 +48,7 @@ io.on('connection', (socket) => {
             checkWin(speaker); 
         }
         
-        // 誰が押したかを最後に記録する (checkWinの後の判定に使うため)
+        // 誰が押したかを最後に記録する
         gameState.lastSpeaker = speaker;
         // ----------------------------------------
         
@@ -95,24 +95,27 @@ function checkWin(currentSpeaker) {
     const previousWinner = gameState.currentWinner; 
     const previousSpeaker = gameState.lastSpeaker; // 最後のボタンを押した人
 
-    // 1. コンボをリセットすべき条件をチェック
-    if (previousSpeaker === 'komatsu' || previousWinner === null) {
-        // (A) 直前が小松、または最初の押しの場合
-        //    -> 新しいコンボをトリコ/ココ/サニー/ゼブラで開始する
+    // 1. 小松が押されていない場合の特殊処理
+    if (previousSpeaker !== 'komatsu' && previousWinner === null) {
+        // コンボが始まっていない初期状態で、小松以外が押した場合は無効化
+        // currentWinnerを設定せず、currentCountも0のまま維持することで勝利を阻止
+        gameState.currentWinner = currentSpeaker; // 押した人として記録はする
+        gameState.currentCount = 0; // カウントは0のまま、勝利阻止
+        console.log("コンボ開始失敗！小松が押す必要があります。");
+        return; // これ以上処理せずに終了
+    }
+
+    // 2. コンボの開始・継続・中断のロジック
+    
+    if (previousWinner !== currentSpeaker) {
+        // (A) 別の四天王が押した、または直前が小松で新しい四天王が押した
         gameState.currentWinner = currentSpeaker;
         gameState.currentCount = 1;
 
-    } else if (previousWinner === currentSpeaker) {
+    } else {
         // (B) 同じ四天王が連続で押した場合（コンボ継続）
         //    -> 小松の介入は不要で、コンボを伸ばす
         gameState.currentCount++;
-
-    } else {
-        // (C) 別の四天王が押した場合（コンボ中断）
-        //    -> コンボをリセットし、新しい四天王でコンボを1から開始
-        gameState.currentWinner = currentSpeaker;
-        gameState.currentCount = 1;
-        console.log(`コンボが中断されました。${gameState.names[currentSpeaker]}のコンボを1から再開します。`);
     }
 
     // 勝利判定
