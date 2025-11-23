@@ -62,7 +62,7 @@ io.on('connection', (socket) => {
              setTimeout(() => {
                  resetComboStateOnly(); 
                  io.emit('update_game_state', gameState); 
-             }, 3000); 
+             }, 1000); 
         }
     });
 
